@@ -120,6 +120,38 @@ final class AIService {
         return response.content
     }
 
+    // MARK: - Document Import Generation
+
+    func generateStorylineFromDocument(_ text: String) async throws -> Storyline {
+        isGenerating = true
+        defer { isGenerating = false }
+
+        let session = LanguageModelSession(
+            instructions: """
+            You are a presentation coach. Given a document (which may be notes, an article, \
+            a markdown outline, or raw text), extract and organize it into a structured \
+            presentation storyline. Identify the main theme, break the content into clearly \
+            ordered talking points, and create an engaging opening hook and closing statement. \
+            Each talking point should have a concise title, detailed notes on what to say, \
+            and 3-5 key phrases the speaker would naturally use. Preserve the author's \
+            intent and ordering where possible.
+            """
+        )
+
+        let prompt = """
+        DOCUMENT CONTENT:
+        \(text.prefix(12000))
+
+        Generate a presentation storyline from this content.
+        """
+
+        let response = try await session.respond(
+            to: prompt,
+            generating: Storyline.self
+        )
+        return response.content
+    }
+
     // MARK: - Coverage Analysis
 
     func analyzeCoverage(

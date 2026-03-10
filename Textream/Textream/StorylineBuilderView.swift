@@ -2,15 +2,15 @@ import SwiftUI
 
 struct StorylineBuilderView: View {
     @Binding var chatMessages: [ChatMessage]
-    @Binding var storyline: Storyline?
     @Binding var isReadyToGenerate: Bool
-    let onStartPresenting: () -> Void
+    let onStorylineGenerated: (Storyline) -> Void
 
     @State private var inputText = ""
     @State private var isStreaming = false
     @State private var streamingContent = ""
     @State private var errorMessage: String?
     @State private var isGeneratingStoryline = false
+    @State private var didGenerate = false
 
     private let ai = AIService.shared
 
@@ -97,7 +97,7 @@ struct StorylineBuilderView: View {
                     }
                 }
 
-            if isReadyToGenerate && storyline == nil && !isGeneratingStoryline {
+            if isReadyToGenerate && !didGenerate && !isGeneratingStoryline {
                 Button {
                     generateStoryline()
                 } label: {
@@ -206,8 +206,9 @@ struct StorylineBuilderView: View {
         Task {
             do {
                 let generated = try await ai.generateStoryline(from: chatMessages)
-                storyline = generated
                 isGeneratingStoryline = false
+                didGenerate = true
+                onStorylineGenerated(generated)
             } catch {
                 isGeneratingStoryline = false
                 errorMessage = "Failed to generate storyline: \(error.localizedDescription)"
@@ -245,117 +246,6 @@ struct ChatBubble: View {
 
     private var displayContent: String {
         message.content.replacingOccurrences(of: "READY_TO_GENERATE", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-}
-
-// MARK: - Storyline Outline View
-
-struct StorylineOutlineView: View {
-    @Binding var storyline: Storyline?
-    let onStartPresenting: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            if let storyline {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        Text(storyline.title)
-                            .font(.system(size: 18, weight: .bold))
-                            .padding(.bottom, 4)
-
-                        GroupBox {
-                            Text(storyline.openingHook)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label("Opening", systemImage: "play.circle")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-
-                        ForEach(Array(storyline.points.enumerated()), id: \.offset) { i, point in
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack(spacing: 8) {
-                                    Text("\(i + 1)")
-                                        .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                        .foregroundStyle(.white)
-                                        .frame(width: 22, height: 22)
-                                        .background(Color.accentColor)
-                                        .clipShape(Circle())
-                                    Text(point.title)
-                                        .font(.system(size: 14, weight: .semibold))
-                                }
-
-                                Text(point.details)
-                                    .font(.system(size: 13))
-                                    .foregroundStyle(.secondary)
-
-                                FlowLayout(spacing: 4) {
-                                    ForEach(point.keyPhrases, id: \.self) { phrase in
-                                        Text(phrase)
-                                            .font(.system(size: 11))
-                                            .padding(.horizontal, 8)
-                                            .padding(.vertical, 3)
-                                            .background(Color.accentColor.opacity(0.1))
-                                            .clipShape(Capsule())
-                                    }
-                                }
-                            }
-                            .padding(12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .fill(Color.primary.opacity(0.03))
-                            )
-                        }
-
-                        GroupBox {
-                            Text(storyline.closingStatement)
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                        } label: {
-                            Label("Closing", systemImage: "flag.checkered")
-                                .font(.system(size: 12, weight: .semibold))
-                        }
-                    }
-                    .padding(16)
-                }
-
-                Divider()
-
-                Button {
-                    onStartPresenting()
-                } label: {
-                    HStack(spacing: 8) {
-                        Image(systemName: "play.fill")
-                            .font(.system(size: 14))
-                        Text("Start Presenting")
-                            .font(.system(size: 14, weight: .semibold))
-                    }
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(Color.green)
-                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                }
-                .buttonStyle(.plain)
-                .padding(16)
-            } else {
-                VStack(spacing: 12) {
-                    Spacer()
-                    Image(systemName: "text.badge.plus")
-                        .font(.system(size: 32, weight: .light))
-                        .foregroundStyle(.tertiary)
-                    Text("Your storyline will appear here")
-                        .font(.system(size: 14))
-                        .foregroundStyle(.tertiary)
-                    Text("Answer the questions in the chat to build your presentation outline.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.quaternary)
-                        .multilineTextAlignment(.center)
-                    Spacer()
-                }
-                .padding(16)
-            }
-        }
     }
 }
 

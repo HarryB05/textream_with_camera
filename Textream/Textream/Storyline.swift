@@ -50,6 +50,22 @@ struct CoverageAnalysis: Codable {
     var suggestion: String
 }
 
+// MARK: - Saved Storyline (persistence wrapper)
+
+struct SavedStoryline: Identifiable, Codable {
+    let id: UUID
+    var storyline: Storyline
+    var createdAt: Date
+    var updatedAt: Date
+
+    init(storyline: Storyline, id: UUID = UUID(), createdAt: Date = Date(), updatedAt: Date = Date()) {
+        self.id = id
+        self.storyline = storyline
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
 // MARK: - Chat Message
 
 struct ChatMessage: Identifiable {

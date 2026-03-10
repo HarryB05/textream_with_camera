@@ -4,23 +4,72 @@ struct ContentView: View {
     @ObservedObject private var service = TextreamService.shared
     @State private var showSettings = false
     @State private var showAbout = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
 
     var body: some View {
-        NavigationSplitView {
-            StorylineBuilderView(
-                chatMessages: $service.chatMessages,
-                storyline: $service.currentStoryline,
-                isReadyToGenerate: $service.isReadyToGenerate,
-                onStartPresenting: startPresenting
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            StorylineListView(
+                store: service.store,
+                selectedID: $service.selectedStorylineID,
+                isCreatingNew: $service.isCreatingNew,
+                onImportGenerated: { storyline in
+                    service.saveAndSelect(storyline)
+                }
             )
+            .navigationSplitViewColumnWidth(min: 180, ideal: 220, max: 280)
+        } content: {
+            if service.isCreatingNew {
+                StorylineBuilderView(
+                    chatMessages: $service.chatMessages,
+                    isReadyToGenerate: $service.isReadyToGenerate,
+                    onStorylineGenerated: { storyline in
+                        service.saveAndSelect(storyline)
+                    }
+                )
+                .navigationSplitViewColumnWidth(min: 280, ideal: 360, max: 480)
+            } else {
+                builderPlaceholder
+            }
         } detail: {
-            StorylineOutlineView(
-                storyline: $service.currentStoryline,
-                onStartPresenting: startPresenting
-            )
+            if let binding = savedBinding {
+                StorylineEditorView(
+                    saved: binding,
+                    onSave: { updated in
+                        service.store.update(updated)
+                    },
+                    onStartPresenting: { startPresenting() }
+                )
+            } else if service.isCreatingNew {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "text.badge.plus")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("Your storyline will appear here")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.tertiary)
+                    Text("Answer the questions in the chat to build your presentation outline.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.quaternary)
+                        .multilineTextAlignment(.center)
+                    Spacer()
+                }
+                .padding(16)
+            } else {
+                VStack(spacing: 12) {
+                    Spacer()
+                    Image(systemName: "doc.text")
+                        .font(.system(size: 32, weight: .light))
+                        .foregroundStyle(.tertiary)
+                    Text("Select a storyline or create a new one")
+                        .font(.system(size: 14))
+                        .foregroundStyle(.tertiary)
+                    Spacer()
+                }
+                .padding(16)
+            }
         }
-        .navigationSplitViewColumnWidth(min: 300, ideal: 400, max: 500)
-        .frame(minWidth: 700, minHeight: 500)
+        .frame(minWidth: 800, minHeight: 500)
         .background(.ultraThinMaterial)
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -50,20 +99,6 @@ struct ContentView: View {
                     }
 
                     Button {
-                        service.resetSession()
-                    } label: {
-                        HStack(spacing: 4) {
-                            Image(systemName: "arrow.counterclockwise")
-                                .font(.system(size: 10))
-                            Text("New")
-                                .font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .disabled(service.isPresentationActive)
-
-                    Button {
                         showSettings = true
                     } label: {
                         Image(systemName: "gear")
@@ -91,15 +126,45 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Helpers
+
+    private var savedBinding: Binding<SavedStoryline>? {
+        guard let id = service.selectedStorylineID,
+              service.store.storyline(for: id) != nil else { return nil }
+        return Binding(
+            get: { service.store.storyline(for: id)! },
+            set: { service.store.update($0) }
+        )
+    }
+
+    private var builderPlaceholder: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            Image(systemName: "bubble.left.and.text.bubble.right")
+                .font(.system(size: 28, weight: .light))
+                .foregroundStyle(.tertiary)
+            Text("Chat builder")
+                .font(.system(size: 13))
+                .foregroundStyle(.tertiary)
+            Text("Use \"New from Chat\" to build a storyline interactively.")
+                .font(.system(size: 11))
+                .foregroundStyle(.quaternary)
+                .multilineTextAlignment(.center)
+            Spacer()
+        }
+        .padding(16)
+    }
+
     private func startPresenting() {
-        guard let storyline = service.currentStoryline else { return }
+        guard let id = service.selectedStorylineID,
+              let saved = service.store.storyline(for: id) else { return }
 
         service.onOverlayDismissed = {
             NSApp.activate(ignoringOtherApps: true)
             NSApp.windows.first?.makeKeyAndOrderFront(nil)
         }
 
-        service.startPresentation(with: storyline)
+        service.startPresentation(with: saved.storyline)
     }
 }
 
