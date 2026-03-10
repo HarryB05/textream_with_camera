@@ -23,6 +23,7 @@ struct CoachingOverlayView: View {
             VStack(spacing: 8) {
                 progressBar
                 currentPointView
+                fillerCountView
                 missedPointsView
                 suggestionView
             }
@@ -30,7 +31,7 @@ struct CoachingOverlayView: View {
             .padding(.top, menuBarHeight > 0 ? 2 : 10)
             .padding(.bottom, 6)
 
-            Spacer(minLength: 0)
+            transcriptView
 
             bottomBar
         }
@@ -66,6 +67,18 @@ struct CoachingOverlayView: View {
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     Spacer()
+                    Button {
+                        tracker.advanceToNextPoint()
+                    } label: {
+                        Text("Next")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.white.opacity(0.2))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
                 .padding(.vertical, 2)
             } else {
@@ -82,6 +95,48 @@ struct CoachingOverlayView: View {
                         Spacer()
                     }
                     .padding(.vertical, 2)
+                }
+            }
+        }
+    }
+
+    // MARK: - Live Transcript
+
+    private var transcriptView: some View {
+        ScrollViewReader { proxy in
+            ScrollView(.vertical, showsIndicators: false) {
+                Text(tracker.transcript.isEmpty ? " " : tracker.transcript)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.leading)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
+                    .id("bottom")
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .onChange(of: tracker.transcript) { _, _ in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+            }
+        }
+        .background(Color.black.opacity(0.3))
+    }
+
+    // MARK: - Filler Word Counter
+
+    private var fillerCountView: some View {
+        Group {
+            let fillers = tracker.fillerCounts.filter { $0.value > 0 }
+                .sorted(by: { $0.key < $1.key })
+            if !fillers.isEmpty {
+                HStack(spacing: 10) {
+                    ForEach(fillers, id: \.key) { word, count in
+                        Text("\(word): \(count)")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.orange.opacity(0.9))
+                    }
                 }
             }
         }
@@ -136,13 +191,20 @@ struct CoachingOverlayView: View {
     // MARK: - Bottom Bar
 
     private var bottomBar: some View {
-        HStack(spacing: 8) {
-            AudioLevelIndicator(levels: tracker.transcriber.audioLevels)
-                .frame(width: 60, height: 20)
+        VStack(spacing: 6) {
+            if let error = tracker.transcriber.error {
+                Text(error)
+                    .font(.system(size: 9))
+                    .foregroundStyle(.red.opacity(0.9))
+                    .lineLimit(2)
+            }
+            HStack(spacing: 8) {
+                AudioLevelIndicator(levels: tracker.transcriber.audioLevels)
+                    .frame(width: 60, height: 20)
 
-            Spacer()
+                Spacer()
 
-            Text(tracker.formattedElapsedTime)
+                Text(tracker.formattedElapsedTime)
                 .font(.system(size: 11, weight: .medium, design: .monospaced))
                 .foregroundStyle(.white.opacity(0.4))
 
@@ -171,9 +233,11 @@ struct CoachingOverlayView: View {
                     .clipShape(Circle())
             }
             .buttonStyle(.plain)
+            }
+            }
+            .padding(.horizontal, 14)
+            .padding(.bottom, 10)
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 10)
     }
 
     private func colorForStatus(_ status: PointStatus) -> Color {
@@ -184,7 +248,7 @@ struct CoachingOverlayView: View {
         case .missed:   return .orange
         }
     }
-}
+
 
 // MARK: - Floating Coaching Overlay
 

@@ -13,6 +13,9 @@ final class PresentationTracker {
     var transcript: String = ""
     var elapsedTime: TimeInterval = 0
 
+    /// Filler word counts (e.g. "um", "like") from the transcript so far
+    var fillerCounts: [String: Int] = [:]
+
     let transcriber = LiveTranscriber()
 
     private let ai = AIService.shared
@@ -31,16 +34,23 @@ final class PresentationTracker {
     func start() {
         isActive = true
         transcript = ""
+        fillerCounts = [:]
         lastAnalyzedLength = 0
         elapsedTime = 0
 
         for (i, _) in storyline.points.enumerated() {
             pointStatuses[i] = .upcoming
         }
+        // Show first point as current so user knows what to say and phase advances visibly
+        if !storyline.points.isEmpty {
+            pointStatuses[0] = .current
+            currentPointIndex = 0
+        }
 
         transcriber.onTranscriptUpdate = { [weak self] fullTranscript in
             guard let self, self.isActive else { return }
             self.transcript = fullTranscript
+            self.updateFillerCounts(from: fullTranscript)
             self.updateKeywordCoverage()
 
             let newChars = fullTranscript.count - self.lastAnalyzedLength
@@ -79,7 +89,23 @@ final class PresentationTracker {
                 pointStatuses[index] = status
             }
         }
+        // When a point becomes covered, advance the "current" to the next upcoming
+        autoAdvanceCurrentIfNeeded()
         updateCurrentPoint()
+    }
+
+    /// When the current point is marked covered (by keywords or AI), set next upcoming as current
+    private func autoAdvanceCurrentIfNeeded() {
+        let current = currentPointIndex
+        guard current >= 0, current < storyline.points.count else { return }
+        guard pointStatuses[current] == .covered else { return }
+        // Find next upcoming point and set it current
+        for i in (current + 1)..<storyline.points.count {
+            if pointStatuses[i] == .upcoming {
+                pointStatuses[i] = .current
+                break
+            }
+        }
     }
 
     private func updateCurrentPoint() {
@@ -93,6 +119,57 @@ final class PresentationTracker {
         if latestCurrent >= 0 {
             currentPointIndex = latestCurrent
         }
+    }
+
+    // MARK: - Manual advance
+
+    /// Move to the next point manually (mark current as covered, set next as current).
+    func advanceToNextPoint() {
+        let current = currentPointIndex
+        guard current >= 0, current < storyline.points.count else { return }
+        pointStatuses[current] = .covered
+        for i in (current + 1)..<storyline.points.count {
+            if pointStatuses[i] == .upcoming || pointStatuses[i] == .current {
+                pointStatuses[i] = .current
+                currentPointIndex = i
+                return
+            }
+        }
+        currentPointIndex = -1
+    }
+
+    // MARK: - Filler word counting
+
+    /// Filler words and variants the speech recogniser might produce (e.g. "umm", "uhm", "eh").
+    /// Each label is what we show; forms are all transcript variants we count under that label.
+    private static let fillerWordGroups: [(label: String, forms: [String])] = [
+        ("um", ["um", "umm", "ummm", "uhm", "umh"]),
+        ("uh", ["uh", "uhh", "uhhh"]),
+        ("eh", ["eh", "ehm", "ehh"]),
+        ("er", ["er", "erm", "err", "errr"]),
+        ("ah", ["ah", "ahh", "ahhh"]),
+        ("like", ["like"])
+    ]
+
+    private static func label(for word: String) -> String? {
+        let lower = word.lowercased()
+        for group in PresentationTracker.fillerWordGroups {
+            if group.forms.contains(lower) { return group.label }
+        }
+        return nil
+    }
+
+    private func updateFillerCounts(from transcript: String) {
+        let words = transcript.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        var counts: [String: Int] = [:]
+        for word in words {
+            if let label = Self.label(for: word) {
+                counts[label, default: 0] += 1
+            }
+        }
+        fillerCounts = counts
     }
 
     // MARK: - AI-powered deep analysis
