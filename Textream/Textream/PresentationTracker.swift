@@ -21,8 +21,10 @@ final class PresentationTracker {
     private let ai = AIService.shared
     private var analysisTask: Task<Void, Never>?
     private var elapsedTimer: Timer?
+    private var analysisTimer: Timer?
     private var lastAnalyzedLength = 0
     private let analysisThreshold = 80 // chars of new speech before re-analyzing
+    private let analysisInterval: TimeInterval = 5.0 // run AI coverage analysis every 5 seconds
 
     init(storyline: Storyline) {
         self.storyline = storyline
@@ -64,6 +66,12 @@ final class PresentationTracker {
         elapsedTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             self?.elapsedTime += 1
         }
+
+        analysisTimer = Timer.scheduledTimer(withTimeInterval: analysisInterval, repeats: true) { [weak self] _ in
+            guard let self, self.isActive, !self.transcript.isEmpty else { return }
+            self.scheduleAIAnalysis()
+        }
+        analysisTimer?.tolerance = 0.5
     }
 
     func stop() {
@@ -73,6 +81,8 @@ final class PresentationTracker {
         analysisTask = nil
         elapsedTimer?.invalidate()
         elapsedTimer = nil
+        analysisTimer?.invalidate()
+        analysisTimer = nil
     }
 
     // MARK: - Keyword-based instant coverage

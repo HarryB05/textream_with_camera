@@ -30,10 +30,23 @@ final class AIService {
     """
 
     private let coverageSystemPrompt = """
-    You are analyzing a live presentation transcript against a planned storyline. \
-    Determine which points have been covered, which is currently being discussed, \
-    and which have been missed or skipped. Be generous in matching — the speaker \
-    won't use exact words from the plan. Focus on semantic meaning.
+    You are analyzing a live presentation transcript against a planned storyline. Your job is to \
+    classify each storyline point (by index) as covered, current, or missed.
+
+    Rules:
+    - COVERED: The speaker has clearly finished this point. They have said enough about it \
+    (semantic meaning, not exact words) and have moved on or wrapped it up. Be generous: if the \
+    gist was said, mark it covered even if wording differed.
+    - MISSED: The speaker has moved past this point without covering it. For example, they \
+    covered point 0 and then talked about point 2; point 1 is missed. Any point that should \
+    have been discussed before the current topic but was skipped belongs in missedIndices.
+    - CURRENT: The point the speaker is on right now (or the next point they should address \
+    if they are between points). Only one point should be current; use currentPointIndex for it.
+
+    Points are in order. Once a point is covered, later points can be current or missed; earlier \
+    points that were never addressed are missed. Return coveredIndices, missedIndices, and \
+    currentPointIndex accordingly. Give a brief suggestion (suggestion) for what to say next \
+    if relevant.
     """
 
     // MARK: - Builder Chat
@@ -167,13 +180,14 @@ final class AIService {
         )
 
         let prompt = """
-        STORYLINE POINTS:
+        STORYLINE POINTS (index, title, details, key phrases):
         \(storylineDescription)
 
-        TRANSCRIPT SO FAR:
+        LIVE TRANSCRIPT:
         \(transcript)
 
-        Analyze which points have been covered, which is current, and which were missed.
+        From the transcript, list which point indices are covered, which are missed (skipped), \
+        which single index is current (the one being spoken now or next), and a one-sentence suggestion.
         """
 
         let response = try await session.respond(
